@@ -11,9 +11,7 @@ import com.microsoft.azure.management.network.PublicIPAddress;
 import com.microsoft.azure.management.resources.ResourceGroup;
 import com.microsoft.azure.management.resources.fluentcore.arm.Region;
 import com.microsoft.azure.management.resources.fluentcore.arm.models.Resource;
-import com.microsoft.azure.management.resources.fluentcore.model.Creatable;
-import com.microsoft.azure.management.resources.fluentcore.model.CreatedResources;
-import com.microsoft.azure.management.resources.fluentcore.model.Indexable;
+import com.microsoft.azure.management.resources.fluentcore.model.*;
 import com.microsoft.azure.management.resources.fluentcore.utils.SdkContext;
 import com.microsoft.azure.management.storage.StorageAccount;
 import com.microsoft.rest.RestClient;
@@ -182,6 +180,44 @@ public class VirtualMachineOperationsTests extends ComputeManagementTest {
     }
 
     @Test
+    public void canApplyVirtualMachinesAndRelatedResourcesInParallel() throws Exception {
+        String vmNamePrefix = "vmz";
+        String publicIpNamePrefix = generateRandomResourceName("pip-", 15);
+        String networkNamePrefix = generateRandomResourceName("vnet-", 15);
+        int count = 1;
+        int diskSizeGB = 8;
+        int lun = 1;
+
+
+        CreatablesInfo creatablesInfo = prepareCreatableVirtualMachines(REGION,
+                vmNamePrefix,
+                networkNamePrefix,
+                publicIpNamePrefix,
+                count);
+        List<Creatable<VirtualMachine>> virtualMachineCreatables = creatablesInfo.virtualMachineCreatables;
+
+        CreatedResources<VirtualMachine> createdVirtualMachines = computeManager.virtualMachines().create(virtualMachineCreatables);
+
+        List<Appliable<VirtualMachine>> appliableVirtualMachines = new ArrayList<>(createdVirtualMachines.size());
+        for (VirtualMachine vm : createdVirtualMachines.values()) {
+            appliableVirtualMachines.add(vm.update().withNewDataDisk(diskSizeGB, lun, CachingTypes.NONE));
+        }
+
+        UpdatedResources<VirtualMachine> updatedVirtualMachines = computeManager.virtualMachines().apply(appliableVirtualMachines);
+        Assert.assertEquals(appliableVirtualMachines.size(), updatedVirtualMachines.size());
+        for (VirtualMachine vm : updatedVirtualMachines.values()) {
+            boolean found = false;
+            for (VirtualMachineDataDisk dd : vm.dataDisks().values()) {
+                if (dd.lun() == lun) {
+                    found = true;
+                    break;
+                }
+            }
+            Assert.assertTrue(found);
+        }
+    }
+
+    @Test
     public void canStreamParallelCreatedVirtualMachinesAndRelatedResources() throws Exception {
         String vmNamePrefix = "vmz";
         String publicIpNamePrefix = generateRandomResourceName("pip-", 15);
@@ -283,7 +319,6 @@ public class VirtualMachineOperationsTests extends ComputeManagementTest {
                     .withPopularLinuxImage(KnownLinuxVirtualMachineImage.UBUNTU_SERVER_16_04_LTS)
                     .withRootUsername("tirekicker")
                     .withRootPassword("BaR@12!#")
-                    .withUnmanagedDisks()
                     .withNewStorageAccount(storageAccountCreatable);
 
             virtualMachineCreatables.add(virtualMachineCreatable);

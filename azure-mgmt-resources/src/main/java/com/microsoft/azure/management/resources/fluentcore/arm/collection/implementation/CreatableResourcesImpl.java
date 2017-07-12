@@ -7,16 +7,17 @@
 package com.microsoft.azure.management.resources.fluentcore.arm.collection.implementation;
 
 import com.microsoft.azure.management.resources.fluentcore.collection.SupportsBatchCreation;
-import com.microsoft.azure.management.resources.fluentcore.model.Creatable;
-import com.microsoft.azure.management.resources.fluentcore.model.CreatedResources;
-import com.microsoft.azure.management.resources.fluentcore.model.Indexable;
+import com.microsoft.azure.management.resources.fluentcore.collection.SupportsBatchUpdate;
+import com.microsoft.azure.management.resources.fluentcore.model.*;
 import com.microsoft.azure.management.resources.fluentcore.model.implementation.CreatableUpdatableImpl;
 import com.microsoft.azure.management.resources.fluentcore.utils.Utils;
 import com.microsoft.rest.ServiceFuture;
 import com.microsoft.rest.ServiceCallback;
 import rx.Observable;
 import rx.functions.Func1;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -35,7 +36,8 @@ import java.util.Map;
 public abstract class CreatableResourcesImpl<T extends Indexable, ImplT extends T, InnerT>
         extends CreatableWrappersImpl<T, ImplT, InnerT>
         implements
-            SupportsBatchCreation<T> {
+            SupportsBatchCreation<T>,
+            SupportsBatchUpdate<T> {
 
     protected CreatableResourcesImpl() {
     }
@@ -81,7 +83,6 @@ public abstract class CreatableResourcesImpl<T extends Indexable, ImplT extends 
         return ServiceFuture.fromBody(createAsyncNonStream(creatables), callback);
     }
 
-
     private Observable<CreatedResources<T>> createAsyncNonStream(List<Creatable<T>> creatables) {
         return Utils.<CreatableUpdatableResourcesRoot<T>>rootResource(this.createAsync(creatables))
                 .map(new Func1<CreatableUpdatableResourcesRoot<T>, CreatedResources<T>>() {
@@ -103,6 +104,65 @@ public abstract class CreatableResourcesImpl<T extends Indexable, ImplT extends 
                 });
     }
 
+    @Override
+    public UpdatedResources<T> apply(Appliable<T> ... appliables) {
+        return applyAsyncNonStream(appliables)
+                .toBlocking()
+                .single();
+    }
+
+    @Override
+    public UpdatedResources<T> apply(List<Appliable<T>> appliables) {
+        return applyAsyncNonStream(appliables)
+                .toBlocking()
+                .single();
+    }
+
+    @Override
+    public Observable<Indexable> applyAsync(Appliable<T> ... appliables) {
+        CreatableUpdatableResourcesRootImpl<T> rootResource = new CreatableUpdatableResourcesRootImpl<>();
+        rootResource.addAppliableDependencies(appliables);
+        return rootResource.createAsync();
+    }
+
+    @Override
+    public Observable<Indexable> applyAsync(List<Appliable<T>> appliables) {
+        CreatableUpdatableResourcesRootImpl<T> rootResource = new CreatableUpdatableResourcesRootImpl<>();
+        rootResource.addAppliableDependencies(appliables);
+        return rootResource.createAsync();
+    }
+
+    @Override
+    public ServiceFuture<UpdatedResources<T>> applyAsync(ServiceCallback<UpdatedResources<T>> callback, Appliable<T> ... appliables) {
+        return ServiceFuture.fromBody(applyAsyncNonStream(appliables), callback);
+    }
+
+    @Override
+    public ServiceFuture<UpdatedResources<T>> applyAsync(ServiceCallback<UpdatedResources<T>> callback, List<Appliable<T>> appliables) {
+        return ServiceFuture.fromBody(applyAsyncNonStream(appliables), callback);
+    }
+
+    private Observable<UpdatedResources<T>> applyAsyncNonStream(List<Appliable<T>> appliables) {
+        return Utils.<CreatableUpdatableResourcesRoot<T>>rootResource(this.applyAsync(appliables))
+                .map(new Func1<CreatableUpdatableResourcesRoot<T>, UpdatedResources<T>>() {
+                    @Override
+                    public UpdatedResources<T> call(CreatableUpdatableResourcesRoot<T> tCreatableUpdatableResourcesRoot) {
+                        return new UpdatedResourcesImpl<>(tCreatableUpdatableResourcesRoot);
+                    }
+                });
+    }
+
+    @SuppressWarnings("unchecked")
+    private Observable<UpdatedResources<T>> applyAsyncNonStream(Appliable<T> ... appliables) {
+        return Utils.<CreatableUpdatableResourcesRoot<T>>rootResource(this.applyAsync(appliables))
+                .map(new Func1<CreatableUpdatableResourcesRoot<T>, UpdatedResources<T>>() {
+                    @Override
+                    public UpdatedResources<T> call(CreatableUpdatableResourcesRoot<T> tCreatableUpdatableResourcesRoot) {
+                        return new UpdatedResourcesImpl<>(tCreatableUpdatableResourcesRoot);
+                    }
+                });
+    }
+
     /**
      * Implements CreatedResources.
      * @param <ResourceT> the type of the resources in the batch.
@@ -114,6 +174,50 @@ public abstract class CreatableResourcesImpl<T extends Indexable, ImplT extends 
         private CreatableUpdatableResourcesRoot<ResourceT> creatableUpdatableResourcesRoot;
 
         CreatedResourcesImpl(CreatableUpdatableResourcesRoot<ResourceT> creatableUpdatableResourcesRoot) {
+            this.creatableUpdatableResourcesRoot = creatableUpdatableResourcesRoot;
+            for (ResourceT resource : this.creatableUpdatableResourcesRoot.createdTopLevelResources()) {
+                super.put(resource.key(), resource);
+            }
+        }
+
+        @Override
+        public Indexable createdRelatedResource(String key) {
+            return this.creatableUpdatableResourcesRoot.createdRelatedResource(key);
+        }
+
+        @Override
+        public void clear() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ResourceT put(String key, ResourceT value) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ResourceT remove(Object key) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void putAll(Map<? extends String, ? extends ResourceT> m) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+
+    /**
+     * Implements UpdatedResources.
+     * @param <ResourceT> the type of the resources in the batch.
+     */
+    private class UpdatedResourcesImpl<ResourceT extends Indexable>
+        extends HashMap<String, ResourceT>
+        implements UpdatedResources<ResourceT> {
+        private static final long serialVersionUID = -1360746896732289907L;
+        private CreatableUpdatableResourcesRoot<ResourceT> creatableUpdatableResourcesRoot;
+
+        UpdatedResourcesImpl(CreatableUpdatableResourcesRoot<ResourceT> creatableUpdatableResourcesRoot) {
             this.creatableUpdatableResourcesRoot = creatableUpdatableResourcesRoot;
             for (ResourceT resource : this.creatableUpdatableResourcesRoot.createdTopLevelResources()) {
                 super.put(resource.key(), resource);
@@ -202,6 +306,21 @@ public abstract class CreatableResourcesImpl<T extends Indexable, ImplT extends 
             for (Creatable<T> item : creatables) {
                 this.keys.add(item.key());
                 this.addCreatableDependency((item));
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        void addAppliableDependencies(Appliable<T>... appliables) {
+            for (Appliable<T> item : appliables) {
+                this.keys.add(item.key());
+                this.addAppliableDependency((item));
+            }
+        }
+
+        void addAppliableDependencies(List<Appliable<T>> appliables) {
+            for (Appliable<T> item : appliables) {
+                this.keys.add(item.key());
+                this.addAppliableDependency((item));
             }
         }
 

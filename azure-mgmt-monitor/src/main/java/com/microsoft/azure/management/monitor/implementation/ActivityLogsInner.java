@@ -276,7 +276,7 @@ public class ActivityLogsInner {
 
     private ServiceResponse<PageImpl1<EventDataInner>> listDelegate(Response<ResponseBody> response) throws ErrorResponseException, IOException, IllegalArgumentException {
         return this.client.restClient().responseBuilderFactory().<PageImpl1<EventDataInner>, ErrorResponseException>newInstance(this.client.serializerAdapter())
-                .register(200, new TypeToken<PageImpl1<EventDataInner>>() { }.getType())
+                .register(200, new TypeToken<PageImpl<EventDataInner>>() { }.getType())
                 .registerError(ErrorResponseException.class)
                 .build(response);
     }
